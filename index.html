@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mid-Autumn Festival</title>
+    <meta name="color-scheme" content="dark light" />
+
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #eaf2ff;
+        --muted: #cbd6ea;
+        --accent: #7cc7ff;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        /*change the font */
+        font: 18px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+          Arial, serif;
+        overflow-x: hidden;
+      }
+
+      /* Intro/Outro fades */
+      #pageFade,
+      #endFade {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 9999;
+        opacity: 1;
+        pointer-events: none;
+        transition: opacity 900ms ease;
+      }
+      #pageFade.hide {
+        opacity: 0;
+      }
+      #endFade {
+        opacity: 0;
+      }
+      #endFade.show {
+        opacity: 1;
+      }
+
+      .hud {
+        position: fixed;
+        inset: 1rem 1rem auto auto;
+        z-index: 10;
+        display: flex;
+        gap: 0.5rem;
+      }
+      .btn {
+        border: 1px solid rgba(127, 199, 255, 0.35);
+        background: rgba(11, 16, 32, 0.55);
+        color: var(--fg);
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.65rem;
+        cursor: pointer;
+        font-family: "Spectral", serif;
+        font-size: 0.95rem;
+      }
+      .btn:focus-visible {
+        outline: 2px dashed var(--accent);
+        outline-offset: 2px;
+      }
+
+      .scene {
+        position: relative;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      .video-wrap {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+      }
+      .video-wrap video {
+        position: absolute;
+        min-width: 100%;
+        min-height: 100%;
+        width: auto;
+        height: auto;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(1.04);
+        object-fit: cover;
+        filter: brightness(0.82) saturate(1.06);
+        opacity: 0;
+        transition: opacity 900ms ease, transform 2000ms ease;
+        will-change: opacity, transform;
+      }
+      .scene.active .video-wrap video {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.28),
+          rgba(0, 0, 0, 0.58)
+        );
+        z-index: 1;
+      }
+
+      .panel {
+        position: relative;
+        z-index: 2;
+        max-width: 72ch;
+        text-align: center;
+        background: rgba(11, 16, 32, 0.5);
+        border: 1px solid rgba(127, 199, 255, 0.22);
+        border-radius: 14px;
+        padding: 1.1rem 1.3rem;
+        margin: 9vh 1rem;
+        transform: translateY(16px);
+        opacity: 0;
+        transition: opacity 700ms ease, transform 700ms ease;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      }
+      .panel.show {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* Smaller, balanced headings */
+      .panel h1,
+      .panel h2 {
+        margin: 0.15rem 0 0.5rem;
+        line-height: 1.08;
+        font-family: "Cinzel", "Spectral", serif;
+        font-weight: 700;
+        letter-spacing: 0.015em;
+        font-size: clamp(1.6rem, 4.2vw, 3.2rem);
+      }
+
+      /* Slightly reduced lead size */
+      .lead {
+        color: var(--muted);
+        font-family: "Spectral", serif;
+        font-weight: 500;
+        font-size: clamp(1.05rem, 2.1vw, 1.45rem);
+        line-height: 1.35;
+        margin: 0 auto;
+      }
+
+      /* One sentence per line (JS wraps in .line) */
+      .lead .line {
+        display: block;
+        margin: 0.12em 0;
+        white-space: pre-wrap;
+      }
+
+      .hint {
+        color: #cfe6ff;
+        font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+        opacity: 0.9;
+        margin-top: 0.6rem;
+      }
+
+      /* Progress dots */
+      .dots {
+        position: fixed;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
+        display: grid;
+        gap: 0.5rem;
+      }
+      .dot {
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 50%;
+        border: 1px solid rgba(127, 199, 255, 0.6);
+        background: transparent;
+        cursor: pointer;
+      }
+      .dot.active {
+        background: var(--accent);
+        box-shadow: 0 0 0 3px rgba(124, 199, 255, 0.25);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pageFade" aria-hidden="true"></div>
+    <div id="endFade" aria-hidden="true"></div>
+
+    <div class="hud" role="region" aria-label="Controls">
+      <button class="btn" id="muteBtn" aria-pressed="true">🔇 Muted</button>
+      <button class="btn" id="pauseAllBtn">⏸ Pause All</button>
+    </div>
+
+    <div class="dots" id="dots" aria-label="Scene navigation"></div>
+    <section class="scene" id="scene-3" aria-label="Arrival">
+      <div class="video-wrap" aria-hidden="true">
+        <!--Put sound here-->
+        <video
+          class="story-video"
+          src="assets/725179__ivoliyt__lion_dance_2024_hong_kong-4.wav"
+          autoplay
+          muted
+          playsinline
+          preload="metadata"
+        ></video>
+      </div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="panel">
+        <!--Put name of the chapter-->
+        <h2>Lion Dance drums</h2>
+        <!--Put the text here-->
+        <p class="lead">
+          The bustling sound of lion dance drums makes children excited,
+          signaling the arrival of the Mid-Autumn Festival.
+        </p>
+      </div>
+    </section>
+    <!-- Scenes -->
+
+    <section class="scene" id="scene-1" aria-label="Departure">
+      <div class="video-wrap" aria-hidden="true">
+        <!--Put the first scene.mp4-->
+        <video
+          class="story-video"
+          src="assets/lantern_and_mooncake.mp4"
+          autoplay
+          muted
+          playsinline
+          preload="metadata"
+          loop
+        ></video>
+      </div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="panel">
+        <!--Put name of the chapter-->
+        <h1>Lanterns and Mooncakes</h1>
+        <!--Put text of the story-->
+        <p class="lead">
+          The alley hums with drumbeats. Your hands smell like pomelo peel and
+          mooncake crust. Your little cousin tugs your sleeve: the lion dance is
+          starting.
+        </p>
+        <div class="hint">Scroll ↓</div>
+      </div>
+    </section>
+
+    <section class="scene" id="scene-2" aria-label="Crossing">
+      <div class="video-wrap" aria-hidden="true">
+        <!--Put the second scene.mp4-->
+        <video
+          class="story-video"
+          src="assets/create_lanterns_find_each_other_under_the.mp4"
+          autoplay
+          muted
+          playsinline
+          preload="metadata"
+          loop
+        ></video>
+      </div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="panel">
+        <!--Put name of the chapter-->
+        <h2>Moonrise</h2>
+        <!--Put text of the story-->
+        <p class="lead">Mid-Autumn Festival is when the moon brightest</p>
+      </div>
+    </section>
+
+    <section class="scene" id="scene-3" aria-label="Arrival">
+      <div class="video-wrap" aria-hidden="true">
+        <!--Put scene 3 here-->
+        <video
+          class="story-video"
+          src="assets/children_with_star_lanterns_n_ng_sao.mp4"
+          autoplay
+          muted
+          playsinline
+          preload="metadata"
+        ></video>
+      </div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="panel">
+        <!--Put name of the chapter-->
+        <h2>Lanterns find each other under the full moon</h2>
+        <!--Put the text here-->
+        <p class="lead">
+          Mid-Autumn Festival / Tết Trung Thu — a night of light, mooncakes, and
+          reunion
+        </p>
+      </div>
+    </section>
+
+    <script>
+      /* ======= Video orchestration + transitions (unchanged) ======= */
+      const scenes = Array.from(document.querySelectorAll(".scene"));
+      const videos = scenes.map((s) => s.querySelector("video"));
+      const panels = scenes.map((s) => s.querySelector(".panel"));
+      const dotsWrap = document.getElementById("dots");
+      const muteBtn = document.getElementById("muteBtn");
+      const pauseAllBtn = document.getElementById("pauseAllBtn");
+      const pageFade = document.getElementById("pageFade");
+      const endFade = document.getElementById("endFade");
+
+      let muted = true,
+        globallyPaused = false;
+
+      /* Dots */
+      scenes.forEach((sec, i) => {
+        const b = document.createElement("button");
+        b.className = "dot";
+        b.title = sec.getAttribute("aria-label") || `Scene ${i + 1}`;
+        b.addEventListener("click", () =>
+          sec.scrollIntoView({ behavior: "smooth" })
+        );
+        dotsWrap.appendChild(b);
+      });
+      function setDot(i, active) {
+        const dots = dotsWrap.children;
+        for (let k = 0; k < dots.length; k++)
+          dots[k].classList.toggle("active", k === i && active);
+      }
+
+      /* Intro */
+      window.addEventListener("load", () => {
+        requestAnimationFrame(() => {
+          pageFade.classList.add("hide");
+          activateScene(0);
+          panels[0]?.classList.add("show");
+          setDot(0, true);
+          splitLeadSentences();
+        });
+      });
+
+      /* Helpers */
+      function isInView(el, minRatio = 0.3) {
+        const r = el.getBoundingClientRect();
+        const vpH = window.innerHeight || document.documentElement.clientHeight;
+        const top = Math.max(0, r.top);
+        const bottom = Math.min(vpH, r.bottom);
+        const visible = Math.max(0, bottom - top);
+        const ratio = visible / Math.min(vpH, r.height);
+        return ratio >= minRatio;
+      }
+      function activateScene(i) {
+        scenes.forEach((s, k) => s.classList.toggle("active", k === i));
+      }
+      async function playIfPossible(v) {
+        if (!globallyPaused) {
+          try {
+            await v.play();
+          } catch {}
+        }
+      }
+
+      /* Observers */
+      if ("IntersectionObserver" in window) {
+        const sceneIO = new IntersectionObserver(
+          (entries) => {
+            entries.forEach(async (e) => {
+              const i = scenes.indexOf(e.target);
+              const v = videos[i];
+              if (e.isIntersecting && e.intersectionRatio >= 0.3) {
+                activateScene(i);
+                v.muted = muted;
+                await playIfPossible(v);
+                setDot(i, true);
+              } else {
+                v.pause();
+                v.currentTime = Math.max(0, v.currentTime - 0.2);
+                setDot(i, false);
+              }
+            });
+          },
+          { threshold: [0, 0.3, 1] }
+        );
+        scenes.forEach((s) => sceneIO.observe(s));
+
+        const panelIO = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => {
+              if (e.isIntersecting && e.intersectionRatio >= 0.3)
+                e.target.classList.add("show");
+            });
+          },
+          { threshold: [0, 0.3, 1] }
+        );
+        panels.forEach((p) => panelIO.observe(p));
+      } else {
+        const onScroll = () => {
+          scenes.forEach((s, i) => {
+            const inView = isInView(s, 0.3);
+            const v = videos[i];
+            s.classList.toggle("active", inView);
+            if (inView) {
+              v.muted = muted;
+              playIfPossible(v);
+              setDot(i, true);
+              panels[i]?.classList.add("show");
+            } else {
+              v.pause();
+              setDot(i, false);
+            }
+          });
+        };
+        addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+      }
+
+      /* Scene 3 end fade */
+      const scene3 = document.getElementById("scene-3");
+      const video3 = scene3.querySelector("video");
+      video3.addEventListener("ended", () => {
+        videos.forEach((v) => v.pause());
+        endFade.classList.add("show");
+        setTimeout(() => endFade.classList.remove("show"), 5000);
+      });
+
+      /* Mobile kick */
+      ["click", "touchstart", "keydown"].forEach((evt) => {
+        window.addEventListener(
+          evt,
+          async () => {
+            const i = scenes.findIndex((s) => isInView(s, 0.3));
+            const v = videos[Math.max(0, i)];
+            if (v && v.paused && !globallyPaused) {
+              v.muted = muted;
+              try {
+                await v.play();
+              } catch {}
+            }
+          },
+          { once: true, passive: true }
+        );
+      });
+
+      /* HUD */
+      muteBtn.addEventListener("click", async () => {
+        muted = !muted;
+        muteBtn.textContent = muted ? "🔇 Muted" : "🔊 Sound On";
+        muteBtn.setAttribute("aria-pressed", String(!muted));
+        videos.forEach((v) => (v.muted = muted));
+        if (!muted) {
+          const i = scenes.findIndex((s) => isInView(s, 0.3));
+          const v = videos[Math.max(0, i)];
+          if (v && v.paused && !globallyPaused) {
+            try {
+              await v.play();
+            } catch {}
+          }
+        }
+      });
+      pauseAllBtn.addEventListener("click", async () => {
+        globallyPaused = !globallyPaused;
+        pauseAllBtn.textContent = globallyPaused ? "▶️ Resume" : "⏸ Pause All";
+        if (globallyPaused) videos.forEach((v) => v.pause());
+        else {
+          const i = scenes.findIndex((s) => isInView(s, 0.3));
+          const v = videos[Math.max(0, i)];
+          if (v) {
+            try {
+              await v.play();
+            } catch {}
+          }
+        }
+      });
+
+      /* Sentence-per-line */
+      function splitLeadSentences() {
+        const leads = document.querySelectorAll(".panel .lead");
+        leads.forEach((p) => {
+          if (p.dataset.split === "1") return;
+          const text = p.textContent.trim();
+          const parts = text.replace(/\s+/g, " ").match(/[^.!?]+[.!?…]?/g);
+          if (!parts) return;
+          p.textContent = "";
+          parts.forEach((seg) => {
+            const t = seg.trim();
+            if (!t) return;
+            const span = document.createElement("span");
+            span.className = "line";
+            span.textContent = t;
+            p.appendChild(span);
+          });
+          p.dataset.split = "1";
+        });
+      }
+    </script>
+  </body>
+</html>
